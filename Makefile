@@ -2,10 +2,10 @@ all: build
 
 build:
 	@echo "Building..."
-	@go build -o tailscale-tui cmd/tailscale-tui/main.go
+	@go build -o tailscale-tui main.go
 
 run:
-	@go run cmd/tailscale-tui/main.go
+	@go run main.go
 
 clean:
 	@echo "Cleaning..."
