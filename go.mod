@@ -1,6 +1,6 @@
 module github.com/bilguun0203/tailscale-tui
 
-go 1.21.6
+go 1.21
 
 require (
 	github.com/atotto/clipboard v0.1.4
