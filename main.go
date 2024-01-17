@@ -23,10 +23,12 @@ var titleStyle = lipgloss.NewStyle().
 var normalTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#DDDDDD"})
 var dangerTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "197", Dark: "197"})
 var successTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "034", Dark: "049"})
+var warningTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "214", Dark: "214"})
 var mutedTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#C2B8C2", Dark: "#4D4D4D"})
-var layoutStyle = lipgloss.NewStyle().Margin(1)
+var accentTextStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"})
+var layoutStyle = lipgloss.NewStyle()
 var spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-var headerStyle = lipgloss.NewStyle().Margin(2)
+var headerStyle = lipgloss.NewStyle().Margin(1, 2)
 
 type listItem struct {
 	title, desc string
@@ -85,13 +87,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if msg.String() == "y" {
-			if len(m.list.SelectedItem().(listItem).status.TailscaleIPs) > 0 {
-				copyStr := m.list.SelectedItem().(listItem).status.TailscaleIPs[0].String()
-				clipboard.WriteAll(copyStr)
-				m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", copyStr))
-			} else {
+		if msg.String() == "y" || msg.String() == "Y" || msg.String() == "ctrl+y" {
+			copyStr := ""
+			ipCount := len(m.list.SelectedItem().(listItem).status.TailscaleIPs)
+			if ipCount > 0 && msg.String() == "y" {
+				copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[0].String()
+			} else if ipCount > 1 && msg.String() == "Y" {
+				copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[1].String()
+			} else if msg.String() == "ctrl+y" {
+				copyStr = m.list.SelectedItem().(listItem).status.DNSName
+			}
+			if copyStr == "" {
 				m.list.NewStatusMessage("Sorry, nothing to copy.")
+			} else {
+				clipboard.WriteAll(copyStr)
+				m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", accentTextStyle.Copy().Underline(true).Render(copyStr)))
 			}
 		}
 	case loadedStatus:
@@ -132,27 +142,34 @@ func (m model) View() string {
 func (m model) headerView() string {
 	hostname := ""
 	userInfo := ""
+	os := ""
 	ips := ""
-	offersExitNode := "No"
-	exitNode := "-"
+	offersExitNode := "no"
+	usingExitNode := "-"
 	if m.loaded && m.err == nil {
 		if user, ok := m.tailStatus.User[m.tailStatus.Self.UserID]; ok {
 			userInfo = fmt.Sprintf("%s <%s>", user.DisplayName, user.LoginName)
 		}
 		if e, ok := m.tailStatus.Peer[m.exitNode]; ok {
-			exitNode = e.HostName
+			usingExitNode = warningTextStyle.Render(e.HostName)
 		}
 		hostname = m.tailStatus.Self.HostName
+		os = m.tailStatus.Self.OS
 		if m.tailStatus.Self.ExitNodeOption {
-			offersExitNode = "Yes"
+			offersExitNode = warningTextStyle.Render("yes")
 		}
-		for _, v := range m.tailStatus.TailscaleIPs {
-			ips += "\n- " + v.String()
+		ipList := []string{}
+		for _, ip := range m.tailStatus.TailscaleIPs {
+			ipList = append(ipList, ip.String())
 		}
-		ips += "\n- " + m.tailStatus.Self.DNSName
+		ipList = append(ipList, m.tailStatus.Self.DNSName)
+		ips = strings.Join(ipList, " | ")
 	}
 	title := titleStyle.Render(" This node ")
-	body := normalTextStyle.Render(fmt.Sprintf("%s\n\nHostname: %s\n%s\n\nOffers Exit Node: %s\nUsing Exit Node: %s", userInfo, hostname, ips, offersExitNode, exitNode))
+	hostname = accentTextStyle.Render("Host: ") + hostname + " " + os
+	ips = accentTextStyle.Render("IPs: ") + ips
+	exitNode := accentTextStyle.Render("Exit node: ") + mutedTextStyle.Render("offers:") + (offersExitNode) + mutedTextStyle.Render(" / using:") + usingExitNode
+	body := normalTextStyle.Render(fmt.Sprintf("%s\n\n%s\n%s\n%s", userInfo, hostname, ips, exitNode))
 	return headerStyle.Render(fmt.Sprintf("%s\n\n%s", title, body))
 }
 
@@ -170,13 +187,20 @@ func getItems(m *model, status *ipnstate.Status) []list.Item {
 		return first < second
 	})
 
+	peers = append([]ipnstate.PeerStatus{*status.Self}, peers...)
+
 	m.exitNode = tskey.NodePublic{}
 	for _, v := range peers {
 		state := dangerTextStyle.Render("●")
 		if v.Online {
 			state = successTextStyle.Render("●")
 		}
+		hostName := v.HostName
 		owner := "my device"
+		if v.ID == status.Self.ID {
+			hostName = "◆ " + hostName
+			owner = "this device"
+		}
 		if v.UserID != status.Self.UserID {
 			owner = "from:" + status.User[v.UserID].LoginName
 		}
@@ -189,12 +213,15 @@ func getItems(m *model, status *ipnstate.Status) []list.Item {
 			m.exitNode = v.PublicKey
 			exitNode = successTextStyle.Copy().Bold(true).Render("[→]")
 		}
-		title := fmt.Sprintf("%s %s %s %s %s", v.HostName, state, owner, v.OS, exitNode)
+		os := v.OS
+		title := fmt.Sprintf("%s %s %s %s %s", hostName, state, owner, os, exitNode)
 		desc := "- "
+		ips := []string{}
 		for _, ip := range v.TailscaleIPs {
-			desc += fmt.Sprintf("%s. ", ip)
+			ips = append(ips, ip.String())
 		}
-		desc += fmt.Sprintf("\n- %s", v.DNSName)
+		ips = append(ips, v.DNSName)
+		desc += strings.Join(ips, " | ")
 		items = append(items, listItem{title: title, desc: desc, status: v})
 	}
 	return items
@@ -219,11 +246,16 @@ func initialModel(ctx context.Context) model {
 		Padding(0, 0, 0, 2)
 	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Copy().
 		Foreground(lipgloss.AdaptiveColor{Light: "#C2B8C2", Dark: "#4D4D4D"})
-	d.SetHeight(3)
+	d.SetHeight(2)
+	d.SetSpacing(1)
 
 	m := model{list: list.New([]list.Item{}, d, 0, 0), spinner: spinner.New()}
 	m.list.Title = "Nodes"
 	m.list.Styles.Title = titleStyle.Copy().Padding(0, 1)
+	m.list.FilterInput.PromptStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"})
+	m.list.FilterInput.Cursor.Style = lipgloss.NewStyle().
+		Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"})
 	m.list.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			keyMaps.copyIpv4,
