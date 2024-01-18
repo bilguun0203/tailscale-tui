@@ -53,7 +53,10 @@ type loadedStatus *ipnstate.Status
 type statusError error
 
 type listKeyMap struct {
-	copyIpv4 key.Binding
+	copyIpv4    key.Binding
+	copyIpv6    key.Binding
+	copyDNSName key.Binding
+	refresh     key.Binding
 }
 
 func newListKeyMaps() *listKeyMap {
@@ -61,6 +64,18 @@ func newListKeyMaps() *listKeyMap {
 		copyIpv4: key.NewBinding(
 			key.WithKeys("y"),
 			key.WithHelp("y", "copy ipv4"),
+		),
+		copyIpv6: key.NewBinding(
+			key.WithKeys("Y"),
+			key.WithHelp("Y", "copy ipv6"),
+		),
+		copyDNSName: key.NewBinding(
+			key.WithKeys("ctrl+y"),
+			key.WithHelp("ctrl+y", "copy domain"),
+		),
+		refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh"),
 		),
 	}
 }
@@ -103,6 +118,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				clipboard.WriteAll(copyStr)
 				m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", accentTextStyle.Copy().Underline(true).Render(copyStr)))
 			}
+		}
+		if msg.String() == "r" {
+			cmd = getStatus()
+			cmds = append(cmds, cmd)
 		}
 	case loadedStatus:
 		m.tailStatus = msg
@@ -259,11 +278,15 @@ func initialModel(ctx context.Context) model {
 	m.list.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			keyMaps.copyIpv4,
+			keyMaps.refresh,
 		}
 	}
 	m.list.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			keyMaps.copyIpv4,
+			keyMaps.copyIpv6,
+			keyMaps.copyDNSName,
+			keyMaps.refresh,
 		}
 	}
 	m.spinner.Spinner = spinner.Dot
