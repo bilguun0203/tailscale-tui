@@ -3,6 +3,7 @@ package nodedetails
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
@@ -58,12 +59,15 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 
 func (m Model) detailView() string {
 	title := constants.AltTitleStyle.Render(" Node info ")
+	status := constants.AltAccentTextStyle.Render("Status: ")
 	hostname := constants.AltAccentTextStyle.Render("Host: ")
 	userInfo := "??? <???>"
 	ips := constants.AltAccentTextStyle.Render("IPs: ")
+	relay := constants.AltAccentTextStyle.Render("Relay: ")
 	offersExitNode := "no"
 	exitNode := constants.AltAccentTextStyle.Render("Exit node: ")
 	asExitNode := ""
+	keyExpiry := constants.AltAccentTextStyle.Render("Key expiry: ")
 	if m.tailStatus != nil {
 		node, ok := m.tailStatus.Peer[m.nodeID]
 		if !ok && m.tailStatus.Self.PublicKey == m.nodeID {
@@ -81,16 +85,32 @@ func (m Model) detailView() string {
 			for _, ip := range node.TailscaleIPs {
 				ipList = append(ipList, ip.String())
 			}
+			if node.Online {
+				status += constants.SuccessTextStyle.Render("Online")
+			} else {
+				status += constants.DangerTextStyle.Render("Offline")
+			}
+			if node.KeyExpiry == nil {
+				keyExpiry += "Disabled"
+			} else {
+				if node.Expired {
+					keyExpiry += constants.DangerTextStyle.Render("Expired ")
+				} else {
+					keyExpiry += "Active "
+				}
+				keyExpiry += constants.MutedTextStyle.Render("(" + node.KeyExpiry.Local().Format(time.RFC3339) + ")")
+			}
 			ipList = append(ipList, node.DNSName)
 			ips += strings.Join(ipList, " | ")
 			hostname += node.HostName + " (" + node.OS + ")"
+			relay += node.Relay
 			exitNode += constants.MutedTextStyle.Render("offers:") + offersExitNode
 			if node.ExitNode {
 				asExitNode = constants.WarningTextStyle.Render("~ This node is currently being used as an exit node.")
 			}
 		}
 	}
-	body := constants.NormalTextStyle.Render(fmt.Sprintf("%s\n\n%s\n%s\n%s\n%s", userInfo, hostname, ips, exitNode, asExitNode))
+	body := lipgloss.JoinVertical(lipgloss.Left, userInfo+"\n", hostname, status, ips, relay, keyExpiry, exitNode, asExitNode)
 	return constants.HeaderStyle.Render(fmt.Sprintf("%s\n\n%s", title, body))
 }
 
