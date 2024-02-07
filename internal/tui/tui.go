@@ -1,17 +1,14 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 
+	"github.com/bilguun0203/tailscale-tui/internal/tailscale"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	nodelist "github.com/bilguun0203/tailscale-tui/internal/tui/node_list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"tailscale.com/client/tailscale"
-	"tailscale.com/ipn/ipnstate"
-	tskey "tailscale.com/types/key"
 )
 
 type viewState int
@@ -30,29 +27,43 @@ func (f viewState) String() string {
 
 type Model struct {
 	viewState      viewState
-	tsStatus       *ipnstate.Status
-	selectedNodeID tskey.NodePublic
+	tsStatus       tailscale.Status
+	selectedNodeID string
 	isLoading      bool
 	err            error
 	nodelist       nodelist.Model
 	nodedetails    nodedetails.Model
 	spinner        spinner.Model
-	msg            string
 	w, h           int
 }
 
-type statusLoaded *ipnstate.Status
+type statusRequest struct {
+	status tailscale.Status
+	err    error
+}
+
+type statusLoaded tailscale.Status
 type statusError error
-type nodeSelected *ipnstate.PeerStatus
-type backNodeSelected bool
+
+func getTsStatusAsync(c chan statusRequest) {
+	ts, err := tailscale.New()
+	if err != nil {
+		c <- statusRequest{status: tailscale.Status{}, err: err}
+		return
+	}
+	s, e := ts.Status()
+	c <- statusRequest{status: s, err: e}
+}
 
 func getTsStatus() tea.Cmd {
 	return func() tea.Msg {
-		status, err := tailscale.Status(context.Background())
-		if err != nil {
-			return statusError(err)
+		c := make(chan statusRequest)
+		go getTsStatusAsync(c)
+		statusReq := <-c
+		if statusReq.err != nil {
+			return statusError(statusReq.err)
 		}
-		return statusLoaded(status)
+		return statusLoaded(statusReq.status)
 	}
 }
 
@@ -71,11 +82,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case statusLoaded:
-		m.tsStatus = msg
-		m.nodelist = nodelist.New(m.tsStatus, m.w, m.h)
+		m.tsStatus = tailscale.Status(msg)
+		m.nodelist = nodelist.New(&m.tsStatus, m.w, m.h)
 		m.isLoading = false
 	case statusError:
 		m.isLoading = false
+		m.err = msg
 		return m, tea.Quit
 	case nodedetails.BackMsg:
 		m.viewState = viewStateList
@@ -83,8 +95,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = getTsStatus()
 		cmds = append(cmds, cmd)
 	case nodelist.NodeSelectedMsg:
-		m.selectedNodeID = tskey.NodePublic(msg)
-		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h)
+		m.selectedNodeID = string(msg)
+		m.nodedetails = nodedetails.New(&m.tsStatus, m.selectedNodeID, m.w, m.h)
 		m.viewState = viewStateDetails
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height

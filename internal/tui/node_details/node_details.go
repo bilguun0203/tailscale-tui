@@ -2,22 +2,22 @@ package nodedetails
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/bilguun0203/tailscale-tui/internal/tailscale"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"tailscale.com/ipn/ipnstate"
-	tskey "tailscale.com/types/key"
 )
 
 type Model struct {
-	tailStatus *ipnstate.Status
-	nodeID     tskey.NodePublic
+	tailStatus *tailscale.Status
+	nodeID     string
 	keyMap     keymap.KeyMap
 	w, h       int
 	help       help.Model
@@ -75,16 +75,15 @@ func (m Model) detailView() string {
 			ok = true
 		}
 		if ok {
-			if user, ok := m.tailStatus.User[node.UserID]; ok {
+			if user, ok := m.tailStatus.User[strconv.FormatInt(node.UserID, 10)]; ok {
 				userInfo = fmt.Sprintf("%s <%s>", user.DisplayName, user.LoginName)
+			} else {
+				userInfo = fmt.Sprintf("??? <%d>", node.UserID)
 			}
 			if node.ExitNodeOption {
 				offersExitNode = constants.WarningTextStyle.Render("yes")
 			}
-			ipList := []string{}
-			for _, ip := range node.TailscaleIPs {
-				ipList = append(ipList, ip.String())
-			}
+			ipList := node.TailscaleIPs
 			if node.Online {
 				status += constants.SuccessTextStyle.Render("Online")
 			} else {
@@ -143,7 +142,7 @@ func (m Model) View() string {
 
 }
 
-func New(status *ipnstate.Status, nodeID tskey.NodePublic, w, h int) Model {
+func New(status *tailscale.Status, nodeID string, w, h int) Model {
 	m := Model{
 		keyMap:     keymap.NewKeyMap(),
 		tailStatus: status,

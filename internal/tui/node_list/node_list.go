@@ -3,32 +3,32 @@ package nodelist
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/bilguun0203/tailscale-tui/internal/tailscale"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"tailscale.com/ipn/ipnstate"
-	tskey "tailscale.com/types/key"
 )
 
 type listItem struct {
 	title, desc string
-	status      ipnstate.PeerStatus
+	status      tailscale.PeerStatus
 }
 
-func (i listItem) Title() string               { return i.title }
-func (i listItem) Description() string         { return i.desc }
-func (i listItem) Status() ipnstate.PeerStatus { return i.status }
-func (i listItem) FilterValue() string         { return i.title + " " + i.desc }
+func (i listItem) Title() string                { return i.title }
+func (i listItem) Description() string          { return i.desc }
+func (i listItem) Status() tailscale.PeerStatus { return i.status }
+func (i listItem) FilterValue() string          { return i.title + " " + i.desc }
 
 type Model struct {
-	tailStatus *ipnstate.Status
-	exitNode   tskey.NodePublic
+	tailStatus *tailscale.Status
+	exitNode   string
 	list       list.Model
 	keyMap     keymap.KeyMap
 	msg        string
@@ -43,7 +43,7 @@ func (m *Model) SetSize(w int, h int) {
 	m.list.SetSize(w, h-headerHeight)
 }
 
-type NodeSelectedMsg tskey.NodePublic
+type NodeSelectedMsg string
 type RefreshMsg bool
 
 func (m *Model) updateKeybindings() {
@@ -73,9 +73,9 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		copyStr := ""
 		ipCount := len(m.list.SelectedItem().(listItem).status.TailscaleIPs)
 		if ipCount > 0 && key.Matches(msg, m.keyMap.CopyIpv4) {
-			copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[0].String()
+			copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[0]
 		} else if ipCount > 1 && key.Matches(msg, m.keyMap.CopyIpv6) {
-			copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[1].String()
+			copyStr = m.list.SelectedItem().(listItem).status.TailscaleIPs[1]
 		} else if key.Matches(msg, m.keyMap.CopyDNSName) {
 			copyStr = m.list.SelectedItem().(listItem).status.DNSName
 		}
@@ -104,10 +104,10 @@ func (m Model) headerView() string {
 	ips := ""
 	offersExitNode := "no"
 	usingExitNode := "-"
-	if user, ok := m.tailStatus.User[m.tailStatus.Self.UserID]; ok {
+	if user, ok := m.tailStatus.User[strconv.FormatInt(m.tailStatus.Self.UserID, 10)]; ok {
 		userInfo = fmt.Sprintf("%s <%s>", user.DisplayName, user.LoginName)
 	}
-	if e, ok := m.tailStatus.Peer[m.exitNode]; ok {
+	if e, ok := m.tailStatus.Peer[string(m.exitNode)]; ok {
 		usingExitNode = constants.WarningTextStyle.Render(e.HostName)
 	}
 	hostname = m.tailStatus.Self.HostName
@@ -115,10 +115,7 @@ func (m Model) headerView() string {
 	if m.tailStatus.Self.ExitNodeOption {
 		offersExitNode = constants.WarningTextStyle.Render("yes")
 	}
-	ipList := []string{}
-	for _, ip := range m.tailStatus.TailscaleIPs {
-		ipList = append(ipList, ip.String())
-	}
+	ipList := m.tailStatus.TailscaleIPs
 	ipList = append(ipList, m.tailStatus.Self.DNSName)
 	ips = strings.Join(ipList, " | ")
 	title := constants.TitleStyle.Render(" This node ")
@@ -131,9 +128,9 @@ func (m Model) headerView() string {
 
 func (m *Model) getItems() []list.Item {
 	items := []list.Item{}
-	peers := []ipnstate.PeerStatus{}
+	peers := []tailscale.PeerStatus{}
 	for _, v := range m.tailStatus.Peer {
-		peers = append(peers, *v)
+		peers = append(peers, v)
 	}
 	sort.Slice(peers, func(i, j int) bool {
 		ownNode1 := m.tailStatus.Self.UserID == peers[i].UserID
@@ -143,9 +140,9 @@ func (m *Model) getItems() []list.Item {
 		return first < second
 	})
 
-	peers = append([]ipnstate.PeerStatus{*m.tailStatus.Self}, peers...)
+	peers = append([]tailscale.PeerStatus{m.tailStatus.Self}, peers...)
 
-	m.exitNode = tskey.NodePublic{}
+	m.exitNode = ""
 	for _, v := range peers {
 		state := constants.DangerTextStyle.Render("●")
 		if v.Online {
@@ -158,7 +155,7 @@ func (m *Model) getItems() []list.Item {
 			owner = "this device"
 		}
 		if v.UserID != m.tailStatus.Self.UserID {
-			owner = "from:" + m.tailStatus.User[v.UserID].LoginName
+			owner = "from:" + m.tailStatus.User[strconv.FormatInt(v.UserID, 10)].LoginName
 		}
 		owner = constants.MutedTextStyle.Render("[" + owner + "]")
 		exitNode := ""
@@ -172,10 +169,7 @@ func (m *Model) getItems() []list.Item {
 		os := v.OS
 		title := fmt.Sprintf("%s %s %s %s %s", hostName, state, owner, os, exitNode)
 		desc := "- "
-		ips := []string{}
-		for _, ip := range v.TailscaleIPs {
-			ips = append(ips, ip.String())
-		}
+		ips := v.TailscaleIPs
 		ips = append(ips, v.DNSName)
 		desc += strings.Join(ips, " | ")
 		items = append(items, listItem{title: title, desc: desc, status: v})
@@ -208,7 +202,7 @@ func (m Model) View() string {
 	return fmt.Sprintf("%s\n%s", m.headerView(), m.list.View())
 }
 
-func New(status *ipnstate.Status, w, h int) Model {
+func New(status *tailscale.Status, w, h int) Model {
 	d := list.NewDefaultDelegate()
 	d.Styles.NormalTitle = lipgloss.NewStyle().
 		Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}).
