@@ -15,6 +15,8 @@ type KeyMap struct {
 	ForceQuit     key.Binding
 	ShowFullHelp  key.Binding
 	CloseFullHelp key.Binding
+	TSUp          key.Binding
+	TSDown        key.Binding
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
@@ -65,6 +67,14 @@ func NewKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("q", "esc"),
 			key.WithHelp("q", "quit"),
+		),
+		TSUp: key.NewBinding(
+			key.WithKeys("["),
+			key.WithHelp("[", "up"),
+		),
+		TSDown: key.NewBinding(
+			key.WithKeys("]"),
+			key.WithHelp("]", "down"),
 		),
 		ForceQuit: key.NewBinding(key.WithKeys("ctrl+c")),
 	}
