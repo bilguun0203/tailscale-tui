@@ -1,15 +1,14 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 
+	"github.com/bilguun0203/tailscale-tui/internal/ts"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	nodelist "github.com/bilguun0203/tailscale-tui/internal/tui/node_list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"tailscale.com/client/tailscale"
 	"tailscale.com/ipn/ipnstate"
 	tsKey "tailscale.com/types/key"
 )
@@ -30,7 +29,6 @@ func (f viewState) String() string {
 
 type Model struct {
 	viewState      viewState
-	tsLocalClient  *tailscale.LocalClient
 	tsStatus       *ipnstate.Status
 	selectedNodeID tsKey.NodePublic
 	isLoading      bool
@@ -46,7 +44,7 @@ type statusError error
 
 func (m Model) getTsStatus() tea.Cmd {
 	return func() tea.Msg {
-		status, err := m.tsLocalClient.Status(context.Background())
+		status, err := ts.GetStatus()
 		if err != nil {
 			return statusError(err)
 		}
@@ -129,12 +127,11 @@ func (m Model) View() string {
 	}
 }
 
-func New(lc *tailscale.LocalClient) Model {
+func New() Model {
 	m := Model{
-		tsLocalClient: lc,
-		viewState:     viewStateList,
-		isLoading:     false,
-		spinner:       spinner.New(),
+		viewState: viewStateList,
+		isLoading: false,
+		spinner:   spinner.New(),
 	}
 	m.spinner.Spinner = spinner.Dot
 	m.spinner.Style = constants.SpinnerStyle

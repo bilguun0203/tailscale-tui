@@ -1,20 +1,18 @@
 package nodelist
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/bilguun0203/tailscale-tui/internal/ts"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"tailscale.com/client/tailscale"
-	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
 	tsKey "tailscale.com/types/key"
 )
@@ -98,24 +96,12 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.TSUp) {
-		var lc tailscale.LocalClient
-		lc.EditPrefs(context.Background(), &ipn.MaskedPrefs{
-			Prefs: ipn.Prefs{
-				WantRunning: true,
-			},
-			WantRunningSet: true,
-		})
+		ts.SetTSStatus(true);
 		cmd = func() tea.Msg { return RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.TSDown) {
-		var lc tailscale.LocalClient
-		lc.EditPrefs(context.Background(), &ipn.MaskedPrefs{
-			Prefs: ipn.Prefs{
-				WantRunning: false,
-			},
-			WantRunningSet: true,
-		})
+		ts.SetTSStatus(false);
 		cmd = func() tea.Msg { return RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}

@@ -6,13 +6,10 @@ import (
 
 	"github.com/bilguun0203/tailscale-tui/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
-	"tailscale.com/client/tailscale"
 )
 
-var lc tailscale.LocalClient
-
 func main() {
-	m := tui.New(&lc)
+	m := tui.New()
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	fm, err := p.Run()
