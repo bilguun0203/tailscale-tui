@@ -1,14 +1,17 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/bilguun0203/tailscale-tui/internal/tailscale"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	nodelist "github.com/bilguun0203/tailscale-tui/internal/tui/node_list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"tailscale.com/client/tailscale"
+	"tailscale.com/ipn/ipnstate"
+	tsKey "tailscale.com/types/key"
 )
 
 type viewState int
@@ -27,95 +30,88 @@ func (f viewState) String() string {
 
 type Model struct {
 	viewState      viewState
-	tsStatus       tailscale.Status
-	selectedNodeID string
+	tsLocalClient  *tailscale.LocalClient
+	tsStatus       *ipnstate.Status
+	selectedNodeID tsKey.NodePublic
 	isLoading      bool
-	err            error
+	Err            error
 	nodelist       nodelist.Model
 	nodedetails    nodedetails.Model
 	spinner        spinner.Model
 	w, h           int
 }
 
-type statusRequest struct {
-	status tailscale.Status
-	err    error
-}
-
-type statusLoaded tailscale.Status
+type statusLoaded *ipnstate.Status
 type statusError error
 
-func getTsStatusAsync(c chan statusRequest) {
-	ts, err := tailscale.New()
-	if err != nil {
-		c <- statusRequest{status: tailscale.Status{}, err: err}
-		return
-	}
-	s, e := ts.Status()
-	c <- statusRequest{status: s, err: e}
-}
-
-func getTsStatus() tea.Cmd {
+func (m Model) getTsStatus() tea.Cmd {
 	return func() tea.Msg {
-		c := make(chan statusRequest)
-		go getTsStatusAsync(c)
-		statusReq := <-c
-		if statusReq.err != nil {
-			return statusError(statusReq.err)
+		status, err := m.tsLocalClient.Status(context.Background())
+		if err != nil {
+			return statusError(err)
 		}
-		return statusLoaded(statusReq.status)
+		return statusLoaded(status)
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		getTsStatus(),
 		m.spinner.Tick,
-		m.nodelist.Init(),
+		m.getTsStatus(),
 	}
 	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var tmpCmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case statusLoaded:
-		m.tsStatus = tailscale.Status(msg)
-		m.nodelist = nodelist.New(&m.tsStatus, m.w, m.h)
 		m.isLoading = false
+		m.Err = nil
+		m.tsStatus = msg
+		m.viewState = viewStateList
+		m.nodelist = nodelist.New(m.tsStatus, m.w, m.h)
 	case statusError:
 		m.isLoading = false
-		m.err = msg
+		m.Err = msg
 		return m, tea.Quit
 	case nodedetails.BackMsg:
 		m.viewState = viewStateList
 	case nodelist.RefreshMsg:
-		cmd = getTsStatus()
-		cmds = append(cmds, cmd)
+		m.isLoading = true
+		cmds = append(cmds, m.getTsStatus())
+		cmds = append(cmds, m.spinner.Tick)
 	case nodelist.NodeSelectedMsg:
-		m.selectedNodeID = string(msg)
-		m.nodedetails = nodedetails.New(&m.tsStatus, m.selectedNodeID, m.w, m.h)
+		m.selectedNodeID = tsKey.NodePublic(msg)
+		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h)
 		m.viewState = viewStateDetails
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		if !m.isLoading {
 			m.nodelist.SetSize(msg.Width, msg.Height)
 		}
+	case spinner.TickMsg:
+		if m.isLoading {
+			m.spinner, tmpCmd = m.spinner.Update(msg)
+			cmds = append(cmds, tmpCmd)
+		}
 	}
 
 	switch m.viewState {
 	case viewStateDetails:
-		m.nodedetails, cmd = m.nodedetails.Update(msg)
+		m.nodedetails, tmpCmd = m.nodedetails.Update(msg)
+		cmds = append(cmds, tmpCmd)
 	case viewStateList:
 		if m.isLoading {
-			m.spinner, cmd = m.spinner.Update(msg)
+			m.spinner, tmpCmd = m.spinner.Update(msg)
+			cmds = append(cmds, tmpCmd)
 		} else {
-			m.nodelist, cmd = m.nodelist.Update(msg)
+			m.nodelist, tmpCmd = m.nodelist.Update(msg)
+			cmds = append(cmds, tmpCmd)
 		}
 	}
-	cmds = append(cmds, cmd)
 	return m, tea.Batch(cmds...)
 }
 
@@ -123,21 +119,26 @@ func (m Model) View() string {
 	switch m.viewState {
 	case viewStateDetails:
 		return m.nodedetails.View()
-	default:
+	case viewStateList:
 		if m.isLoading {
-			return fmt.Sprintf("\n\n   %s Loading ...\n\n", m.spinner.View())
+			return fmt.Sprintf("\n\n   %s Loading...\n\n", m.spinner.View())
 		}
 		return m.nodelist.View()
+	default:
+		return "*_*"
 	}
 }
 
-func New() Model {
+func New(lc *tailscale.LocalClient) Model {
 	m := Model{
-		viewState: viewStateList,
-		isLoading: true,
-		spinner:   spinner.New(),
+		tsLocalClient: lc,
+		viewState:     viewStateList,
+		isLoading:     false,
+		spinner:       spinner.New(),
 	}
 	m.spinner.Spinner = spinner.Dot
 	m.spinner.Style = constants.SpinnerStyle
+
+	m.nodelist = nodelist.New(nil, m.w, m.h)
 	return m
 }
