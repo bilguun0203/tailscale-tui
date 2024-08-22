@@ -6,15 +6,24 @@ import (
 
 	"github.com/bilguun0203/tailscale-tui/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
+	"tailscale.com/client/tailscale"
 )
 
-func main() {
-	m := tui.New()
+var lc tailscale.LocalClient
 
+func main() {
+	m := tui.New(&lc)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
+	fm, err := p.Run()
+
+	if err != nil {
 		fmt.Println("Error running program:", err)
+		os.Exit(1)
+	}
+
+	if fm.(tui.Model).Err != nil {
+		fmt.Println("Error running program:", fm.(tui.Model).Err)
 		os.Exit(1)
 	}
 }
