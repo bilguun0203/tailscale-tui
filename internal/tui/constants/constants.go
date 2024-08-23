@@ -2,7 +2,9 @@ package constants
 
 import "github.com/charmbracelet/lipgloss"
 
+var ColorBW = lipgloss.AdaptiveColor{Light: "#000", Dark: "#FFF"}
 var ColorNormal = lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#DDDDDD"}
+var ColorNormalInv = lipgloss.AdaptiveColor{Light: "#DDDDDD", Dark: "#1A1A1A"}
 var ColorDanger = lipgloss.AdaptiveColor{Light: "197", Dark: "197"}
 var ColorSuccess = lipgloss.AdaptiveColor{Light: "034", Dark: "049"}
 var ColorWarning = lipgloss.AdaptiveColor{Light: "214", Dark: "214"}
@@ -13,6 +15,7 @@ var ColorSecondary = lipgloss.AdaptiveColor{Light: "#05EAFF", Dark: "#00E5FA"}
 
 var PrimaryTitleStyle = lipgloss.NewStyle().Padding(0, 1).Background(lipgloss.Color(ColorPrimary.Dark)).Foreground(lipgloss.Color("#000000"))
 var SecondaryTitleStyle = lipgloss.NewStyle().Padding(0, 1).Background(lipgloss.Color(ColorSecondary.Light)).Foreground(lipgloss.Color("#000000"))
+var WarningTitleStyle = lipgloss.NewStyle().Padding(0, 1).Background(lipgloss.Color(ColorWarning.Light)).Foreground(lipgloss.Color("#000000"))
 var NormalTextStyle = lipgloss.NewStyle().Foreground(ColorNormal)
 var DangerTextStyle = lipgloss.NewStyle().Foreground(ColorDanger)
 var SuccessTextStyle = lipgloss.NewStyle().Foreground(ColorSuccess)

@@ -1,8 +1,12 @@
 package nodedetails
 
 import (
+	"fmt"
+
 	"github.com/atotto/clipboard"
+	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
+	"github.com/bilguun0203/tailscale-tui/internal/tui/types"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,6 +58,9 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 			}
 			if copyStr != "" {
 				clipboard.WriteAll(copyStr)
+				status := fmt.Sprintf("Copied \"%s\"!", constants.PrimaryTextStyle.Underline(true).Render(copyStr))
+				cmd = func() tea.Msg { return types.StatusMsg(status) }
+				cmds = append(cmds, cmd)
 			}
 		}
 	}
