@@ -17,7 +17,7 @@ tailscale-tui
 ### Shortcuts
 
 - `↑/k` `↓/j` - up/down
-- `→/l/pgdn` `←/h/pgup` - next/prev page
+- `enter/→/l` `esc/←/h` - enter/back navigation
 - `g/home` `G/end` - go to start/end
 - `q` `Ctrl+c` - quit
 - `/` - filter

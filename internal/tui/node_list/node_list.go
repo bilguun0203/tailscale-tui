@@ -9,8 +9,10 @@ import (
 	"github.com/bilguun0203/tailscale-tui/internal/ts"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
+	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"tailscale.com/ipn/ipnstate"
@@ -32,7 +34,6 @@ type Model struct {
 	exitNode   string
 	list       list.Model
 	keyMap     keymap.KeyMap
-	msg        string
 	w          int
 	h          int
 }
@@ -60,11 +61,12 @@ func (m *Model) updateKeybindings() {
 		m.keyMap.Enter.SetEnabled(false)
 	}
 	m.keyMap.Back.SetEnabled(false)
+	m.keyMap.Quit.SetEnabled(false)
 	m.keyMap.ShowFullHelp.SetEnabled(false)
 	m.keyMap.CloseFullHelp.SetEnabled(false)
-	m.keyMap.Back.SetEnabled(false)
-	m.keyMap.Quit.SetEnabled(false)
 	m.keyMap.ForceQuit.SetEnabled(false)
+	m.list.KeyMap.NextPage.SetEnabled(false)
+	m.list.KeyMap.PrevPage.SetEnabled(false)
 }
 
 func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
@@ -84,7 +86,7 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 			m.list.NewStatusMessage("Sorry, nothing to copy.")
 		} else {
 			clipboard.WriteAll(copyStr)
-			m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", constants.AccentTextStyle.Underline(true).Render(copyStr)))
+			m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", constants.PrimaryTextStyle.Underline(true).Render(copyStr)))
 		}
 	}
 	if key.Matches(msg, m.keyMap.Refresh) {
@@ -96,12 +98,12 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.TSUp) {
-		ts.SetTSStatus(true);
+		ts.SetTSStatus(true)
 		cmd = func() tea.Msg { return RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.TSDown) {
-		ts.SetTSStatus(false);
+		ts.SetTSStatus(false)
 		cmd = func() tea.Msg { return RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
@@ -109,42 +111,10 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 }
 
 func (m Model) headerView() string {
-	hostname := ""
-	userInfo := ""
-	os := ""
-	ips := ""
-	offersExitNode := "no"
-	usingExitNode := "-"
-	if m.tailStatus != nil {
-		if user, ok := m.tailStatus.User[m.tailStatus.Self.UserID]; ok {
-			userInfo = fmt.Sprintf("%s <%s>", user.DisplayName, user.LoginName)
-		}
-		if m.tailStatus.ExitNodeStatus != nil {
-			for _, peer := range m.tailStatus.Peer {
-				if peer.ID == m.tailStatus.ExitNodeStatus.ID {
-					usingExitNode = constants.WarningTextStyle.Render(peer.HostName)
-					break
-				}
-			}
-		}
-		hostname = m.tailStatus.Self.HostName
-		os = m.tailStatus.Self.OS
-		if m.tailStatus.Self.ExitNodeOption {
-			offersExitNode = constants.WarningTextStyle.Render("yes")
-		}
-		var ipList []string
-		for _, ip := range m.tailStatus.TailscaleIPs {
-			ipList = append(ipList, ip.String())
-		}
-		ipList = append(ipList, m.tailStatus.Self.DNSName)
-		ips = strings.Join(ipList, " | ")
+	if m.tailStatus == nil {
+		return nodedetails.NodeDetailRender(nil, tsKey.NodePublic{}, constants.PrimaryTitleStyle.Render("Current Node"))
 	}
-	title := constants.TitleStyle.Render(" This node ")
-	hostname = constants.AccentTextStyle.Render("Host: ") + hostname + " (" + os + ")"
-	ips = constants.AccentTextStyle.Render("IPs: ") + ips
-	exitNode := constants.AccentTextStyle.Render("Exit node: ") + constants.MutedTextStyle.Render("offers:") + (offersExitNode) + constants.MutedTextStyle.Render(" / using:") + usingExitNode
-	body := constants.NormalTextStyle.Render(fmt.Sprintf("%s\n\n%s\n%s\n%s %s", userInfo, hostname, ips, exitNode, m.msg))
-	return constants.HeaderStyle.Render(fmt.Sprintf("%s\n\n%s", title, body))
+	return nodedetails.NodeDetailRender(m.tailStatus, m.tailStatus.Self.PublicKey, constants.PrimaryTitleStyle.Render("Current Node"))
 }
 
 func (m *Model) getItems() []list.Item {
@@ -183,16 +153,16 @@ func (m *Model) getItems() []list.Item {
 		if v.UserID != m.tailStatus.Self.UserID {
 			owner = "from:" + m.tailStatus.User[v.UserID].LoginName
 		}
-		owner = constants.MutedTextStyle.Render("[" + owner + "]")
+		owner = constants.DimmedTextStyle.Render("[" + owner + "]")
 		exitNode := ""
 		if v.ExitNodeOption {
-			exitNode = constants.MutedTextStyle.Bold(true).Render("[→]")
+			exitNode = constants.DimmedTextStyle.Bold(true).Render("[→]")
 		}
 		if v.ExitNode {
 			m.exitNode = v.PublicKey.String()
 			exitNode = constants.SuccessTextStyle.Bold(true).Render("[→]")
 		}
-		os := v.OS
+		os := constants.NormalTextStyle.Render(v.OS)
 		title := fmt.Sprintf("%s %s %s %s %s", hostName, state, owner, os, exitNode)
 		desc := "- "
 		var ips []string
@@ -214,6 +184,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case ts.StatusDataMsg:
+		m.tailStatus = msg
+		if m.tailStatus != nil {
+			cmds = append(cmds, m.list.SetItems(m.getItems()))
+		}
+		m.list.StopSpinner()
 	case tea.KeyMsg:
 		var kcmds []tea.Cmd
 		m, kcmds = m.keyBindingsHandler(msg)
@@ -240,33 +216,32 @@ func New(status *ipnstate.Status, w, h int) Model {
 		Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
 	d.Styles.SelectedTitle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"}).
-		Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"}).
+		BorderForeground(constants.PrimaryTextStyle.GetForeground()).
+		Foreground(constants.PrimaryTextStyle.GetForeground()).
 		Padding(0, 0, 0, 1)
 	d.Styles.SelectedDesc = d.Styles.SelectedTitle
-	d.Styles.DimmedTitle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"}).
-		Padding(0, 0, 0, 2)
-	d.Styles.DimmedDesc = d.Styles.DimmedTitle.
-		Foreground(lipgloss.AdaptiveColor{Light: "#C2B8C2", Dark: "#4D4D4D"})
+	d.Styles.DimmedTitle = constants.DimmedTextStyle.Padding(0, 0, 0, 2)
+	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(constants.MutedTextStyle.GetForeground())
 	d.SetHeight(2)
 	d.SetSpacing(1)
 	m := Model{
 		list:       list.New([]list.Item{}, d, w, h),
 		keyMap:     keymap.NewKeyMap(),
 		tailStatus: status,
+		w:          w,
+		h:          h,
 	}
+	m.list.SetSpinner(spinner.Dot)
+	m.list.StartSpinner()
 	headerHeight := lipgloss.Height(m.headerView())
-	m.list.SetHeight(h - headerHeight)
+	m.list.SetHeight(h - headerHeight - 4)
 
 	m.list.SetItems(m.getItems())
 
 	m.list.Title = "Nodes"
-	m.list.Styles.Title = constants.TitleStyle.Padding(0, 1)
-	m.list.FilterInput.PromptStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"})
-	m.list.FilterInput.Cursor.Style = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#00C86E", Dark: "#20F394"})
+	m.list.Styles.Title = constants.PrimaryTitleStyle
+	m.list.FilterInput.PromptStyle = constants.PrimaryTextStyle
+	m.list.FilterInput.Cursor.Style = constants.PrimaryTextStyle
 	m.list.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			m.keyMap.CopyIpv4,

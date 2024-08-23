@@ -39,16 +39,13 @@ type Model struct {
 	w, h           int
 }
 
-type statusLoaded *ipnstate.Status
-type statusError error
-
 func (m Model) getTsStatus() tea.Cmd {
 	return func() tea.Msg {
 		status, err := ts.GetStatus()
 		if err != nil {
-			return statusError(err)
+			return ts.StatusErrorMsg(err)
 		}
-		return statusLoaded(status)
+		return ts.StatusDataMsg(status)
 	}
 }
 
@@ -65,13 +62,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-	case statusLoaded:
+	case ts.StatusDataMsg:
 		m.isLoading = false
 		m.Err = nil
 		m.tsStatus = msg
 		m.viewState = viewStateList
-		m.nodelist = nodelist.New(m.tsStatus, m.w, m.h)
-	case statusError:
+	case ts.StatusErrorMsg:
 		m.isLoading = false
 		m.Err = msg
 		return m, tea.Quit
@@ -87,9 +83,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState = viewStateDetails
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		if !m.isLoading {
-			m.nodelist.SetSize(msg.Width, msg.Height)
-		}
+		m.nodelist.SetSize(msg.Width, msg.Height)
 	case spinner.TickMsg:
 		if m.isLoading {
 			m.spinner, tmpCmd = m.spinner.Update(msg)
@@ -130,7 +124,7 @@ func (m Model) View() string {
 func New() Model {
 	m := Model{
 		viewState: viewStateList,
-		isLoading: false,
+		isLoading: true,
 		spinner:   spinner.New(),
 	}
 	m.spinner.Spinner = spinner.Dot

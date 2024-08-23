@@ -20,18 +20,26 @@ type KeyMap struct {
 }
 
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.CopyIpv4, k.Back, k.Quit, k.ShowFullHelp}
+	return []key.Binding{k.CopyIpv4, k.Enter, k.Back, k.Quit, k.ShowFullHelp}
 }
 
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.CopyIpv4, k.CopyIpv6, k.CopyDNSName},
-		{k.Back, k.Quit, k.CloseFullHelp},
+		{k.Enter, k.Back, k.Quit, k.CloseFullHelp},
 	}
 }
 
 func NewKeyMap() KeyMap {
 	return KeyMap{
+		Enter: key.NewBinding(
+			key.WithKeys("enter", "right", "l"),
+			key.WithHelp("enter/→/l", "details"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("esc", "left", "h"),
+			key.WithHelp("esc/←/h", "back"),
+		),
 		CopyIpv4: key.NewBinding(
 			key.WithKeys("y"),
 			key.WithHelp("y", "copy ipv4"),
@@ -55,14 +63,6 @@ func NewKeyMap() KeyMap {
 		CloseFullHelp: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "close help"),
-		),
-		Enter: key.NewBinding(
-			key.WithKeys("enter"),
-			key.WithHelp("enter", "details"),
-		),
-		Back: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "back"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("q", "esc"),
