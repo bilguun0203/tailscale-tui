@@ -1,6 +1,7 @@
 package nodedetails
 
 import (
+	"github.com/atotto/clipboard"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -35,6 +36,27 @@ func (m *Model) updateKeybindings() {
 func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
+	node, ok := m.tailStatus.Peer[m.nodeID]
+	if !ok && m.tailStatus.Self.PublicKey == m.nodeID {
+		node = m.tailStatus.Self
+		ok = true
+	}
+	if ok {
+		if key.Matches(msg, m.keyMap.CopyIpv4) || key.Matches(msg, m.keyMap.CopyIpv6) || key.Matches(msg, m.keyMap.CopyDNSName) {
+			copyStr := ""
+			ipCount := len(node.TailscaleIPs)
+			if ipCount > 0 && key.Matches(msg, m.keyMap.CopyIpv4) {
+				copyStr = node.TailscaleIPs[0].String()
+			} else if ipCount > 1 && key.Matches(msg, m.keyMap.CopyIpv6) {
+				copyStr = node.TailscaleIPs[1].String()
+			} else if key.Matches(msg, m.keyMap.CopyDNSName) {
+				copyStr = node.DNSName
+			}
+			if copyStr != "" {
+				clipboard.WriteAll(copyStr)
+			}
+		}
+	}
 	switch {
 	case key.Matches(msg, m.keyMap.Back):
 		cmd = func() tea.Msg {
