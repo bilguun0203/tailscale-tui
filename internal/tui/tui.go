@@ -41,6 +41,8 @@ type Model struct {
 	statusbar      statusbar.Model
 	spinner        spinner.Model
 	w, h           int
+	statusH        int
+	headerH        int
 }
 
 func (m Model) getTsStatus() tea.Cmd {
@@ -51,6 +53,13 @@ func (m Model) getTsStatus() tea.Cmd {
 		}
 		return ts.StatusDataMsg(status)
 	}
+}
+
+func (m Model) headerView() string {
+	if m.tsStatus == nil {
+		return nodedetails.NodeDetailRender(nil, tsKey.NodePublic{}, constants.PrimaryTitleStyle.Render("Current Node"))
+	}
+	return nodedetails.NodeDetailRender(m.tsStatus, m.tsStatus.Self.PublicKey, constants.PrimaryTitleStyle.Render("Current Node"))
 }
 
 func (m Model) Init() tea.Cmd {
@@ -80,6 +89,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodedetails.BackMsg:
 		m.viewState = viewStateList
 		m.statusbar.UpdateMessage("Showing all network devices")
+		cmds = append(cmds, tea.ClearScreen)
 	case types.RefreshMsg:
 		m.isLoading = true
 		cmds = append(cmds, m.getTsStatus())
@@ -88,12 +98,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusbar.UpdateMessage(string(msg))
 	case nodelist.NodeSelectedMsg:
 		m.selectedNodeID = tsKey.NodePublic(msg)
-		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h)
+		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h-m.statusH)
 		m.viewState = viewStateDetails
 		m.statusbar.UpdateMessage("Showing device details")
+		cmds = append(cmds, tea.ClearScreen)
 	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height-3
-		m.nodelist.SetSize(m.w, m.h)
+		m.w, m.h = msg.Width, msg.Height
+		m.headerH = lipgloss.Height(m.headerView())
+		m.statusH = lipgloss.Height(m.statusbar.View())
+		listH := m.h - m.headerH - m.statusH
+		m.nodelist.SetSize(m.w, listH)
 	case spinner.TickMsg:
 		if m.isLoading {
 			m.spinner, tmpCmd = m.spinner.Update(msg)
@@ -133,7 +147,7 @@ func (m Model) View() string {
 		if m.isLoading {
 			m.statusbar.UpdateMessage(fmt.Sprintf("%s Loading...", m.spinner.View()))
 		}
-		return lipgloss.JoinVertical(lipgloss.Left, m.nodelist.View(), m.statusbar.View())
+		return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), m.nodelist.View(), m.statusbar.View())
 	default:
 		return "*_*"
 	}
@@ -149,6 +163,8 @@ func New() Model {
 	m.spinner.Spinner = spinner.Line
 	m.spinner.Style = constants.SpinnerStyle
 
-	m.nodelist = nodelist.New(nil, m.w, m.h-lipgloss.Height(m.statusbar.View()))
+	m.headerH = lipgloss.Height(m.headerView())
+	m.statusH = lipgloss.Height(m.statusbar.View())
+	m.nodelist = nodelist.New(nil, m.w, m.h-m.headerH-m.statusH)
 	return m
 }

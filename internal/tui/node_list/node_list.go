@@ -9,7 +9,6 @@ import (
 	"github.com/bilguun0203/tailscale-tui/internal/ts"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
-	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/types"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -42,8 +41,7 @@ type Model struct {
 func (m *Model) SetSize(w int, h int) {
 	m.w = w
 	m.h = h
-	headerHeight := lipgloss.Height(m.headerView())
-	m.list.SetSize(w, h-headerHeight)
+	m.list.SetSize(w, h)
 }
 
 type NodeSelectedMsg tsKey.NodePublic
@@ -118,12 +116,6 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 	return m, cmds
 }
 
-func (m Model) headerView() string {
-	if m.tailStatus == nil {
-		return nodedetails.NodeDetailRender(nil, tsKey.NodePublic{}, constants.PrimaryTitleStyle.Render("Current Node"))
-	}
-	return nodedetails.NodeDetailRender(m.tailStatus, m.tailStatus.Self.PublicKey, constants.PrimaryTitleStyle.Render("Current Node"))
-}
 
 func (m *Model) getItems() []list.Item {
 	items := []list.Item{}
@@ -212,7 +204,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return fmt.Sprintf("%s\n%s", m.headerView(), m.list.View())
+	return m.list.View()
 }
 
 func New(status *ipnstate.Status, w, h int) Model {
@@ -241,8 +233,7 @@ func New(status *ipnstate.Status, w, h int) Model {
 	}
 	m.list.SetSpinner(spinner.Dot)
 	m.list.StartSpinner()
-	headerHeight := lipgloss.Height(m.headerView())
-	m.list.SetHeight(h - headerHeight - 4)
+	m.list.SetHeight(h)
 
 	m.list.SetItems(m.getItems())
 
