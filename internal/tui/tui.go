@@ -7,8 +7,11 @@ import (
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
 	nodelist "github.com/bilguun0203/tailscale-tui/internal/tui/node_list"
+	statusbar "github.com/bilguun0203/tailscale-tui/internal/tui/status_bar"
+	"github.com/bilguun0203/tailscale-tui/internal/tui/types"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"tailscale.com/ipn/ipnstate"
 	tsKey "tailscale.com/types/key"
 )
@@ -35,6 +38,7 @@ type Model struct {
 	Err            error
 	nodelist       nodelist.Model
 	nodedetails    nodedetails.Model
+	statusbar      statusbar.Model
 	spinner        spinner.Model
 	w, h           int
 }
@@ -67,28 +71,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Err = nil
 		m.tsStatus = msg
 		m.viewState = viewStateList
+		m.statusbar.UpdateMessage("Showing all network devices")
 	case ts.StatusErrorMsg:
 		m.isLoading = false
 		m.Err = msg
+		m.statusbar.UpdateMessage(fmt.Sprintf("Error: %s", msg))
 		return m, tea.Quit
 	case nodedetails.BackMsg:
 		m.viewState = viewStateList
-	case nodelist.RefreshMsg:
+		m.statusbar.UpdateMessage("Showing all network devices")
+	case types.RefreshMsg:
 		m.isLoading = true
 		cmds = append(cmds, m.getTsStatus())
 		cmds = append(cmds, m.spinner.Tick)
+	case types.StatusMsg:
+		m.statusbar.UpdateMessage(string(msg))
 	case nodelist.NodeSelectedMsg:
 		m.selectedNodeID = tsKey.NodePublic(msg)
 		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h)
 		m.viewState = viewStateDetails
+		m.statusbar.UpdateMessage("Showing device details")
 	case tea.WindowSizeMsg:
-		m.w, m.h = msg.Width, msg.Height
-		m.nodelist.SetSize(msg.Width, msg.Height)
+		m.w, m.h = msg.Width, msg.Height-3
+		m.nodelist.SetSize(m.w, m.h)
 	case spinner.TickMsg:
 		if m.isLoading {
 			m.spinner, tmpCmd = m.spinner.Update(msg)
 			cmds = append(cmds, tmpCmd)
 		}
+	}
+
+	if m.isLoading {
+		m.statusbar.UpdatePrefixStyle(constants.WarningTitleStyle)
+	} else {
+		m.statusbar.UpdatePrefixStyle(constants.PrimaryTitleStyle)
 	}
 
 	switch m.viewState {
@@ -104,18 +120,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, tmpCmd)
 		}
 	}
+	m.statusbar, tmpCmd = m.statusbar.Update(msg)
+	cmds = append(cmds, tmpCmd)
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
 	switch m.viewState {
 	case viewStateDetails:
-		return m.nodedetails.View()
+		return lipgloss.JoinVertical(lipgloss.Left, m.nodedetails.View(), m.statusbar.View())
 	case viewStateList:
 		if m.isLoading {
-			return fmt.Sprintf("\n\n   %s Loading...\n\n", m.spinner.View())
+			m.statusbar.UpdateMessage(fmt.Sprintf("%s Loading...", m.spinner.View()))
 		}
-		return m.nodelist.View()
+		return lipgloss.JoinVertical(lipgloss.Left, m.nodelist.View(), m.statusbar.View())
 	default:
 		return "*_*"
 	}
@@ -126,10 +144,11 @@ func New() Model {
 		viewState: viewStateList,
 		isLoading: true,
 		spinner:   spinner.New(),
+		statusbar: statusbar.New(),
 	}
-	m.spinner.Spinner = spinner.Dot
+	m.spinner.Spinner = spinner.Line
 	m.spinner.Style = constants.SpinnerStyle
 
-	m.nodelist = nodelist.New(nil, m.w, m.h)
+	m.nodelist = nodelist.New(nil, m.w, m.h-lipgloss.Height(m.statusbar.View()))
 	return m
 }

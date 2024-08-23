@@ -10,6 +10,7 @@ import (
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	nodedetails "github.com/bilguun0203/tailscale-tui/internal/tui/node_details"
+	"github.com/bilguun0203/tailscale-tui/internal/tui/types"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -46,7 +47,6 @@ func (m *Model) SetSize(w int, h int) {
 }
 
 type NodeSelectedMsg tsKey.NodePublic
-type RefreshMsg bool
 
 func (m *Model) updateKeybindings() {
 	if m.list.SelectedItem() != nil {
@@ -84,13 +84,21 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		}
 		if copyStr == "" {
 			m.list.NewStatusMessage("Sorry, nothing to copy.")
+			cmd = func() tea.Msg { return types.StatusMsg("Sorry, nothing to copy.") }
+			cmds = append(cmds, cmd)
 		} else {
-			clipboard.WriteAll(copyStr)
-			m.list.NewStatusMessage(fmt.Sprintf("Copied \"%s\"!", constants.PrimaryTextStyle.Underline(true).Render(copyStr)))
+			err := clipboard.WriteAll(copyStr)
+			status := fmt.Sprintf("Copied \"%s\"!", constants.PrimaryTextStyle.Underline(true).Render(copyStr))
+			if err != nil {
+				status = fmt.Sprintf("Sorry, error occured: %s", err)
+			}
+			m.list.NewStatusMessage(status)
+			cmd = func() tea.Msg { return types.StatusMsg(status) }
+			cmds = append(cmds, cmd)
 		}
 	}
 	if key.Matches(msg, m.keyMap.Refresh) {
-		cmd = func() tea.Msg { return RefreshMsg(true) }
+		cmd = func() tea.Msg { return types.RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.Enter) {
@@ -99,12 +107,12 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 	}
 	if key.Matches(msg, m.keyMap.TSUp) {
 		ts.SetTSStatus(true)
-		cmd = func() tea.Msg { return RefreshMsg(true) }
+		cmd = func() tea.Msg { return types.RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
 	if key.Matches(msg, m.keyMap.TSDown) {
 		ts.SetTSStatus(false)
-		cmd = func() tea.Msg { return RefreshMsg(true) }
+		cmd = func() tea.Msg { return types.RefreshMsg(true) }
 		cmds = append(cmds, cmd)
 	}
 	return m, cmds
