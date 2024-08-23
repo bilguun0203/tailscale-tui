@@ -1,11 +1,6 @@
 package nodedetails
 
 import (
-	"fmt"
-	"strings"
-	"time"
-
-	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/keymap"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -57,65 +52,6 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 	return m, cmds
 }
 
-func (m Model) detailView() string {
-	title := constants.AltTitleStyle.Render(" Node info ")
-	status := constants.AltAccentTextStyle.Render("Status: ")
-	hostname := constants.AltAccentTextStyle.Render("Host: ")
-	userInfo := "??? <???>"
-	ips := constants.AltAccentTextStyle.Render("IPs: ")
-	relay := constants.AltAccentTextStyle.Render("Relay: ")
-	offersExitNode := "no"
-	exitNode := constants.AltAccentTextStyle.Render("Exit node: ")
-	asExitNode := ""
-	keyExpiry := constants.AltAccentTextStyle.Render("Key expiry: ")
-	if m.tailStatus != nil {
-		node, ok := m.tailStatus.Peer[m.nodeID]
-		if !ok && m.tailStatus.Self.PublicKey == m.nodeID {
-			node = m.tailStatus.Self
-			ok = true
-		}
-		if ok {
-			if user, ok := m.tailStatus.User[node.UserID]; ok {
-				userInfo = fmt.Sprintf("%s <%s>", user.DisplayName, user.LoginName)
-			} else {
-				userInfo = fmt.Sprintf("??? <%d>", node.UserID)
-			}
-			if node.ExitNodeOption {
-				offersExitNode = constants.WarningTextStyle.Render("yes")
-			}
-			var ipList []string
-			for _, ip := range node.TailscaleIPs {
-				ipList = append(ipList, ip.String())
-			}
-			if node.Online {
-				status += constants.SuccessTextStyle.Render("Online")
-			} else {
-				status += constants.DangerTextStyle.Render("Offline")
-			}
-			if node.KeyExpiry == nil {
-				keyExpiry += "Disabled"
-			} else {
-				if node.Expired {
-					keyExpiry += constants.DangerTextStyle.Render("Expired ")
-				} else {
-					keyExpiry += "Active "
-				}
-				keyExpiry += constants.MutedTextStyle.Render("(" + node.KeyExpiry.Local().Format(time.RFC3339) + ")")
-			}
-			ipList = append(ipList, node.DNSName)
-			ips += strings.Join(ipList, " | ")
-			hostname += node.HostName + " (" + node.OS + ")"
-			relay += node.Relay
-			exitNode += constants.MutedTextStyle.Render("offers:") + offersExitNode
-			if node.ExitNode {
-				asExitNode = constants.WarningTextStyle.Render("~ This node is currently being used as an exit node.")
-			}
-		}
-	}
-	body := lipgloss.JoinVertical(lipgloss.Left, userInfo+"\n", hostname, status, ips, relay, keyExpiry, exitNode, asExitNode)
-	return constants.HeaderStyle.Render(fmt.Sprintf("%s\n\n%s", title, body))
-}
-
 func (m Model) Init() tea.Cmd {
 	return nil
 }
@@ -138,7 +74,7 @@ func (m Model) View() string {
 	helpHeight := lipgloss.Height(m.help.View(m.keyMap))
 	detailHeight := m.h - helpHeight
 	return lipgloss.JoinVertical(
-		lipgloss.Left, lipgloss.NewStyle().Height(detailHeight).Render(m.detailView()),
+		lipgloss.Left, lipgloss.NewStyle().Height(detailHeight).Render(NodeDetailRender(m.tailStatus, m.nodeID, "")),
 		lipgloss.NewStyle().Margin(0, 2).Render(m.help.View(m.keyMap)),
 	)
 
