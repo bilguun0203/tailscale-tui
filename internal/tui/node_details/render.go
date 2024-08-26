@@ -12,7 +12,7 @@ import (
 )
 
 func NodeDetailRender(tsStatus *ipnstate.Status, nodeID tsKey.NodePublic, customTitle string) string {
-	title := constants.SecondaryTitleStyle.Render("Node info")
+	title := constants.PrimaryTitleStyle.Render("Node info")
 	if customTitle != "" {
 		title = customTitle
 	}

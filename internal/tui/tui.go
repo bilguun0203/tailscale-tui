@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/bilguun0203/tailscale-tui/internal/ts"
 	"github.com/bilguun0203/tailscale-tui/internal/tui/constants"
@@ -36,6 +37,7 @@ type Model struct {
 	selectedNodeID tsKey.NodePublic
 	isLoading      bool
 	Err            error
+	ExitMessage    string
 	nodelist       nodelist.Model
 	nodedetails    nodedetails.Model
 	statusbar      statusbar.Model
@@ -80,15 +82,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Err = nil
 		m.tsStatus = msg
 		m.viewState = viewStateList
-		m.statusbar.UpdateMessage("Showing all network devices")
+		cmds = append(cmds, types.NewStatusMsg("Showing all network devices"))
 	case ts.StatusErrorMsg:
 		m.isLoading = false
 		m.Err = msg
-		m.statusbar.UpdateMessage(fmt.Sprintf("Error: %s", msg))
 		return m, tea.Quit
+	case ts.ToggleConnectionMsg:
+		if m.tsStatus != nil {
+			newStatus := !m.tsStatus.Self.Online
+			m.isLoading = true
+			if newStatus {
+				cmds = append(cmds, types.NewStatusMsg("Connecting..."))
+			} else {
+				cmds = append(cmds, types.NewStatusMsg("Disconnecting..."))
+			}
+			ts.SetTSStatus(!m.tsStatus.Self.Online)
+			cmds = append(cmds, func() tea.Msg { time.Sleep(2 * time.Second); return types.RefreshMsg(true) })
+		}
 	case nodedetails.BackMsg:
 		m.viewState = viewStateList
-		m.statusbar.UpdateMessage("Showing all network devices")
+		cmds = append(cmds, types.NewStatusMsg("Showing all network devices"))
 		cmds = append(cmds, tea.ClearScreen)
 	case types.RefreshMsg:
 		m.isLoading = true
@@ -96,18 +109,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.spinner.Tick)
 	case types.StatusMsg:
 		m.statusbar.UpdateMessage(string(msg))
+	case types.ExitMsg:
+		m.ExitMessage = string(msg)
+		return m, tea.Quit
 	case nodelist.NodeSelectedMsg:
 		m.selectedNodeID = tsKey.NodePublic(msg)
-		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, m.h-m.statusH)
+		contentH := m.h - m.statusH
+		m.nodedetails = nodedetails.New(m.tsStatus, m.selectedNodeID, m.w, contentH)
 		m.viewState = viewStateDetails
-		m.statusbar.UpdateMessage("Showing device details")
+		cmds = append(cmds, types.NewStatusMsg("Showing device details"))
 		cmds = append(cmds, tea.ClearScreen)
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		m.headerH = lipgloss.Height(m.headerView())
 		m.statusH = lipgloss.Height(m.statusbar.View())
-		listH := m.h - m.headerH - m.statusH
-		m.nodelist.SetSize(m.w, listH)
+		contentH := m.h - m.headerH - m.statusH
+		m.nodelist.SetSize(m.w, contentH)
+		m.nodedetails.SetSize(m.w, contentH)
 	case spinner.TickMsg:
 		if m.isLoading {
 			m.spinner, tmpCmd = m.spinner.Update(msg)
@@ -142,6 +160,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	switch m.viewState {
 	case viewStateDetails:
+		if m.isLoading {
+			m.statusbar.UpdateMessage(fmt.Sprintf("%s %s", m.spinner.View(), m.statusbar.Message()))
+		}
 		return lipgloss.JoinVertical(lipgloss.Left, m.nodedetails.View(), m.statusbar.View())
 	case viewStateList:
 		if m.isLoading {
@@ -165,6 +186,8 @@ func New() Model {
 
 	m.headerH = lipgloss.Height(m.headerView())
 	m.statusH = lipgloss.Height(m.statusbar.View())
-	m.nodelist = nodelist.New(nil, m.w, m.h-m.headerH-m.statusH)
+	contentH := m.h - m.headerH - m.statusH
+	m.nodelist = nodelist.New(nil, m.w, contentH)
+	m.nodedetails = nodedetails.New(m.tsStatus, tsKey.NodePublic{}, m.w, contentH)
 	return m
 }

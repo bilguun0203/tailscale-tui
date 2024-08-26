@@ -23,4 +23,8 @@ func main() {
 		fmt.Println("Error running program:", fm.(tui.Model).Err)
 		os.Exit(1)
 	}
+
+	if fm.(tui.Model).ExitMessage != "" {
+		fmt.Println(fm.(tui.Model).ExitMessage)
+	}
 }

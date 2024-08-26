@@ -82,7 +82,7 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		}
 		if copyStr == "" {
 			m.list.NewStatusMessage("Sorry, nothing to copy.")
-			cmd = func() tea.Msg { return types.StatusMsg("Sorry, nothing to copy.") }
+			cmd = types.NewStatusMsg("Sorry, nothing to copy.")
 			cmds = append(cmds, cmd)
 		} else {
 			err := clipboard.WriteAll(copyStr)
@@ -91,7 +91,7 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 				status = fmt.Sprintf("Sorry, error occured: %s", err)
 			}
 			m.list.NewStatusMessage(status)
-			cmd = func() tea.Msg { return types.StatusMsg(status) }
+			cmd = types.NewStatusMsg(status)
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -103,19 +103,8 @@ func (m Model) keyBindingsHandler(msg tea.KeyMsg) (Model, []tea.Cmd) {
 		cmd = func() tea.Msg { return NodeSelectedMsg(m.list.SelectedItem().(listItem).status.PublicKey) }
 		cmds = append(cmds, cmd)
 	}
-	if key.Matches(msg, m.keyMap.TSUp) {
-		ts.SetTSStatus(true)
-		cmd = func() tea.Msg { return types.RefreshMsg(true) }
-		cmds = append(cmds, cmd)
-	}
-	if key.Matches(msg, m.keyMap.TSDown) {
-		ts.SetTSStatus(false)
-		cmd = func() tea.Msg { return types.RefreshMsg(true) }
-		cmds = append(cmds, cmd)
-	}
 	return m, cmds
 }
-
 
 func (m *Model) getItems() []list.Item {
 	items := []list.Item{}
@@ -209,19 +198,16 @@ func (m Model) View() string {
 
 func New(status *ipnstate.Status, w, h int) Model {
 	d := list.NewDefaultDelegate()
-	d.Styles.NormalTitle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}).
-		Padding(0, 0, 0, 2)
-	d.Styles.NormalDesc = d.Styles.NormalTitle.
-		Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+	d.Styles.NormalTitle = lipgloss.NewStyle().Foreground(constants.ColorNormal).Padding(0, 0, 0, 2)
+	d.Styles.NormalDesc = d.Styles.NormalTitle.Foreground(constants.ColorDimmed)
 	d.Styles.SelectedTitle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(constants.PrimaryTextStyle.GetForeground()).
-		Foreground(constants.PrimaryTextStyle.GetForeground()).
+		BorderForeground(constants.ColorPrimary).
+		Foreground(constants.ColorPrimary).
 		Padding(0, 0, 0, 1)
 	d.Styles.SelectedDesc = d.Styles.SelectedTitle
 	d.Styles.DimmedTitle = constants.DimmedTextStyle.Padding(0, 0, 0, 2)
-	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(constants.MutedTextStyle.GetForeground())
+	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(constants.ColorMuted)
 	d.SetHeight(2)
 	d.SetSpacing(1)
 	m := Model{

@@ -18,6 +18,10 @@ type Model struct {
 	h           int
 }
 
+func (m Model) Message() string {
+	return m.msg
+}
+
 func (m *Model) UpdatePrefix(v string) {
 	m.prefix = v
 }
