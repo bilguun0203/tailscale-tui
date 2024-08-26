@@ -149,9 +149,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		pr, err := ts.Ping(netip.Addr(msg))
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				m.messages = append(m.messages, fmt.Sprintf("ping %q timed out", netip.Addr(msg)))
+				m.messages = append(m.messages, constants.DimmedTextStyle.Render(fmt.Sprintf("ping %q timed out", netip.Addr(msg))))
 			} else {
-				m.messages = append(m.messages, fmt.Sprintf("error: %s", err))
+				m.messages = append(m.messages, constants.DimmedTextStyle.Render(fmt.Sprintf("error: %s", err)))
 			}
 		}
 		if pr != nil {
@@ -164,15 +164,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if pr.Endpoint != "" {
 				m.pingCount = -1
 			}
-			if m.pingCount > 0 {
-				cmds = append(cmds, func() tea.Msg { return msg })
-			} else if m.pingCount == -1 {
-				m.messages = append(m.messages, "\nDone!")
-				cmds = append(cmds, types.NewStatusMsg("Pinging finished."))
-			} else {
-				m.messages = append(m.messages, "\nDone, direct connection not established!")
-				cmds = append(cmds, types.NewStatusMsg("Pinging finished, direct connectsion not established."))
-			}
+		}
+		if m.pingCount > 0 {
+			cmds = append(cmds, func() tea.Msg { return msg })
+		} else if m.pingCount == -1 {
+			m.messages = append(m.messages, "\nDone!")
+			cmds = append(cmds, types.NewStatusMsg("Pinging finished."))
+		} else {
+			m.messages = append(m.messages, "\nDone, direct connection not established!")
+			cmds = append(cmds, types.NewStatusMsg("Pinging finished, direct connectsion not established."))
 		}
 	case tea.KeyMsg:
 		var kcmds []tea.Cmd
